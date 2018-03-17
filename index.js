@@ -92,7 +92,6 @@ var CommonStyle = {
 					});
 					fs.readFile(html, 'utf-8', (e, cont) => {
 						if (e) return console.error(e);
-						// let srcScript = /<script\s(type=\"(.*)\"\s?)?(src)=\"(.*)\"/g
 						let srcScript = [/<script\s.*(src)=\"(.*)\"(\s.*)*><\/script>/g, /<link\s.*(href)=\"(.*)\"(\s.*)*>/],
 							m;
 						for (let s of srcScript){
@@ -109,11 +108,10 @@ var CommonStyle = {
 							}
 						}
 						for (var i in scripts){
-							for (let s of scripts[i]) {
+							for (let s of scripts[i]) {								
 								s = s.replace(/^\.\//, "")
-								fs.readFile(path + s, 'utf-8', (e, c) => {
-									if (e) return console.error(e);
-									scriptsContents[i] += c;
+								fs.readFile(path + s, 'utf-8', (e, c) => {									
+									scriptsContents[s.split(".").slice(-1)] += c;
 									flags++;
 									if (flags === 2 + scripts["js"].length+ scripts["css"].length) {
 										return writeFile(finalFile, cont, scriptsContents)
@@ -123,14 +121,17 @@ var CommonStyle = {
 						}
 					});
 					flags++;
-					// fs.writeFile(__dirname + '/base/tmp.html', `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"></head><body>${cont}</body></html>`, (e) => (e) ? console.error(e) : null)
 				})(),
 				ready = 1,
 				replace = (obj, str, clean) =>{
 					return(() => {
-					var match, rpl, ret, i = 0, regex = /#{(\w+)}/g;
-						while ((match = regex.exec(str)) != null ) {
-							rpl = (obj[match[1]]) ? obj[match[1]] : "";
+					var match, rpl, ret, i = 0, regex = /#{(\w*)(\[(\d+|"\w+")])?}/g;
+						while ((match = regex.exec(str)) != null ) {						
+							rpl = (()=>{								
+								if (!obj[match[1]])return ""								
+								else if (match[3]) return obj[match[1]][match[3]];								
+								else return obj[match[1]];
+							})();
 							str = (obj[match[1]] || clean) ? str.replace(match[0], rpl) : str;
 						}
 						return str;
@@ -145,9 +146,27 @@ var CommonStyle = {
 						"js": src.js,
 						"css": src.css
 					};
-					file = replace(toReplace, total)
+					file = replace(toReplace, total);
 					fs.writeFile("/tmp/modal.html", file, (e) =>{ready++;console.log("ready[write modal]: "+ready)});
-				}
+				},
+				searchResource = (file) =>{
+					/*
+					 * Función encargada de buscar los require que se pidan y adaptarlos a la
+					 * nueva ruta.
+					 * Si empieza en "./" se toma la desde la ubicación del archivo, en caso contrario
+					 * desde aquí (módulos generales)
+					*/
+					
+					let pat = /require\('(.*)'\)/g, m, path = __dirname.split("/").slice(0, -1).join("/")+"/";					
+					while ((m = pat.exec(file)) != null){
+						if (m[1].search("./") == 1){ //Se esta buscando desde la ubicación del archivo
+							console.log(m[1]);
+						}
+						file = file.replace(m[1], path+m[1])						
+					};
+					return file/*.replace(/\n|\t/g, '');*/
+
+				};
 			this.createModal = async function(obj) {
 				let name ='';
 				while (ready!==2){await sleep(5);}
@@ -155,6 +174,7 @@ var CommonStyle = {
 				fs.readFile("/tmp/modal.html", "UTF-8", (e, c) =>{
 					if (e) return console.error(e);
 					c = replace(obj, c);
+					c = searchResource(c);
 					let l = new Date();
 					name = `${l.getHours()}_${l.getMinutes()}_${l.getSeconds()}_${l.getMilliseconds()}.html`;
 					fs.writeFile("/tmp/"+name, c, (e) => {
@@ -163,11 +183,11 @@ var CommonStyle = {
 						ready++;
 					});
 				});
-				
-				while (ready!==3){await sleep(5);}
+				while (ready!==3){await sleep(5);}				
 				console.log("Voy a crear la ventana para el archivo: " + name)
 				let win = new this.BrowserWindow({ width: 400, height: 300, menu: false });
 				win.loadURL("file:///tmp/"+name);
+				win.webContents.openDevTools();
 				win.on('closed', () => { win = null });
 			};
 		}
