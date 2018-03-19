@@ -124,18 +124,37 @@ var CommonStyle = {
 				})(),
 				ready = 1,
 				replace = (obj, str, clean) =>{
-					return(() => {
-					var match, rpl, ret, i = 0, regex = /#{(\w*)(\[(\d+|"\w+")])?}/g;
-						while ((match = regex.exec(str)) != null ) {						
-							rpl = (()=>{								
-								if (!obj[match[1]])return ""								
-								else if (match[3]) return obj[match[1]][match[3]];								
-								else return obj[match[1]];
-							})();
-							str = (obj[match[1]] || clean) ? str.replace(match[0], rpl) : str;
-						}
-						return str;
-					})();
+					var match, rpl, ret, i = 0, regex = /#{(\w*)(\[(\d+|"\w+")])?}/g, list, key, content, match, tmpStr;
+					while ((match = regex.exec(str)) != null ) {						
+						rpl = (()=>{								
+							if (!obj[match[1]])return ""								
+							else if (match[3]) return obj[match[1]][match[3]];								
+							else return (! Array.isArray(obj[match[1]])) ? obj[match[1]] : match[1];
+						})();
+						str = (obj[match[1]] || clean) ? str.replace(match[0], rpl) : str;
+					}
+					regex = /<\s?for\s?(key)="?(\w+)"?\s+(in)=\s?"?(\w+)".*>[\n\t\r\s]*(.*)[\n\t\r\s]*<\/\s*for>/
+					let control= 0;
+					while ((match = regex.exec(str)) != null){
+						tmpStr = '';
+						for (let i in match){
+							if (i==0) continue;
+							if (match[i] == 'key'){
+								key = match[parseInt(i)+1];
+							}
+							else if (match[i]=='in'){
+								list = match[parseInt(i)+1];
+								content = match[parseInt(i)+2];
+							}
+						};
+						let arr = (!Array.isArray(obj[list])) ? [list] : obj[list];  
+						for (let i in arr){
+							tmpStr += content.replace(RegExp(key, 'g'), arr[i]);
+						};
+						control++;
+						str = str.replace(match[0], tmpStr)
+					}
+					return str;
 				},
 				writeFile = (total, content, src) => {
 					/*
@@ -185,7 +204,7 @@ var CommonStyle = {
 				});
 				while (ready!==3){await sleep(5);}				
 				console.log("Voy a crear la ventana para el archivo: " + name)
-				let win = new this.BrowserWindow({ width: 400, height: 300, menu: false });
+				let win = new this.BrowserWindow({ width: 400, height: 300, frame: false });
 				win.loadURL("file:///tmp/"+name);
 				win.webContents.openDevTools();
 				win.on('closed', () => { win = null });
